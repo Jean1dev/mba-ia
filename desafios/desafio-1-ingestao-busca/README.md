@@ -46,15 +46,7 @@ pip install -r requirements.txt
 
 ## 🚀 Execução
 
-### Opção 1: Demonstração (Sem API Key)
-
-Para testar o sistema sem configurar uma API key real:
-
-```bash
-python demo.py
-```
-
-### Opção 2: Sistema Completo (Com API Key)
+### Sistema Completo (Com API Key)
 
 1. **Subir o Banco de Dados:**
    ```bash
@@ -92,7 +84,6 @@ O sistema irá:
 ├── requirements.txt            # Dependências Python
 ├── env.example                # Template de variáveis de ambiente
 ├── document.pdf               # PDF para ingestão
-├── demo.py                    # Script de demonstração
 ├── test_setup.py              # Script de teste de configuração
 ├── src/
 │   ├── ingest.py              # Script de ingestão do PDF
@@ -123,11 +114,6 @@ O sistema irá:
 ### Verificar Configuração
 ```bash
 python test_setup.py
-```
-
-### Executar Demonstração
-```bash
-python demo.py
 ```
 
 ## 🐛 Solução de Problemas
