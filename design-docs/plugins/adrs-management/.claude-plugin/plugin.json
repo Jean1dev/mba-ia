@@ -1,0 +1,8 @@
+{
+  "name": "adrs-management",
+  "description": "ADRs Management plugins for Architecture Decision Records analysis, generation, and linking",
+  "version": "1.0.0",
+  "author": {
+    "name": "Wesley Willians"
+  }
+}

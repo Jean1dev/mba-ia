@@ -1,0 +1,8 @@
+{
+  "name": "diagrams-generator",
+  "description": "Diagrams Generator plugins for C4 and Mermaid diagram generation from Feature Design Documents",
+  "version": "1.0.0",
+  "author": {
+    "name": "Wesley Willians"
+  }
+}
