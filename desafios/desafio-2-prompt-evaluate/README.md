@@ -344,17 +344,17 @@ Rodada em que **todas** as métricas ficaram **≥ 0,9** (*dataset* com 15 exemp
 
 Os valores da coluna v1 são **ilustrativos** (conforme enunciado do desafio); a coluna v2 reflete uma execução **APROVADA** com o prompt em `prompts/bug_to_user_story_v2.yml`.
 
-### Evidências no LangSmith
+### Link público (LangSmith)
 
-1. **Projeto / dashboard:** substitua pelo link público do seu workspace, no formato  
-   `https://smith.langchain.com/projects/<LANGSMITH_PROJECT>`  
-   (no exemplo de execução local foi usado o projeto `mba-ia`.)
-2. **Screenshots:** adicione imagens ao repositório (ex.: pasta `docs/evidencias/`) mostrando:
-   - dataset de avaliação com **15 exemplos**;
-   - execuções do prompt **`{USERNAME_LANGSMITH_HUB}/bug_to_user_story_v2`** com métricas ≥ 0,9;
-   - **tracing** de pelo menos **3** exemplos (runs detalhados no LangSmith).
+Dashboard / visão compartilhada (acesso sem login no workspace, conforme partilha do LangSmith):
 
-*(Esta documentação descreve o que deve aparecer; os arquivos de imagem ficam a cargo de você colar as capturas do seu tenant.)*
+**[Abrir evidências no LangSmith](https://smith.langchain.com/public/aa8b6caa-c594-4d45-a115-8f79aa4b4ac7/d?tab=0)**
+
+### Evidências complementares
+
+1. **Screenshots:** opcional mas recomendado no repositório (ex.: `docs/evidencias/`): dataset com **15 exemplos**, métricas da avaliação do prompt v2 (≥ 0.9) e **tracing** de pelo menos **3** exemplos.
+
+*(O link `/public/...` é o relatório ou recurso que você marcou como público no LangSmith; dentro da UI também existe partilha por recurso.)*
 
 ---
 
@@ -405,14 +405,14 @@ pytest tests/test_prompts.py -v
    | Item | Onde está neste arquivo |
    |------|-------------------------|
    | A) Técnicas, justificativas e exemplos práticos | [Técnicas Aplicadas (Fase 2)](#técnicas-aplicadas-fase-2) |
-   | B) Resultados, link LangSmith, comparativo v1 × v2 | [Resultados Finais](#resultados-finais) *(insira seu link e screenshots reais)* |
+   | B) Resultados, link LangSmith, comparativo v1 × v2 | [Resultados Finais](#resultados-finais) |
    | C) Como executar, pré-requisitos, comandos por fase | [Como Executar](#como-executar) |
 
 3. **Evidências no LangSmith** (você publica no seu tenant):
 
    - Dataset com **15 exemplos** e runs do prompt **`{USERNAME}/bug_to_user_story_v2`** com todas as métricas **≥ 0,9**
    - **Tracing** detalhado de pelo menos **3** exemplos
-   - Anexe **screenshots** ou URL pública do projeto no LangSmith (preencha na secção [Resultados Finais](#resultados-finais))
+   - **URL pública** e, se quiser, **screenshots** na secção [Resultados Finais](#resultados-finais)
 
 ---
 
