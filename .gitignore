@@ -1,1 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.sqlite
+node_modules/
 .env

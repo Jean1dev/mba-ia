@@ -1,0 +1,39 @@
+### Login
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "email": "aluno@test.com",
+  "senha": "senha123"
+}
+
+### Register
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+
+{
+  "nome": "Novo Aluno",
+  "email": "novo@aluno.com",
+  "senha": "minhasenha"
+}
+
+### List Cursos
+GET http://localhost:3000/cursos
+
+### Get Curso
+GET http://localhost:3000/cursos/1
+
+### Checkout
+POST http://localhost:3000/checkout
+Authorization: Bearer TOKEN_AQUI
+Content-Type: application/json
+
+{
+  "curso_id": 1,
+  "metodo_pagamento": "cartao",
+  "cupom": "DESCONTO10"
+}
+
+### Minhas Matriculas
+GET http://localhost:3000/minhas-matriculas
+Authorization: Bearer TOKEN_AQUI
