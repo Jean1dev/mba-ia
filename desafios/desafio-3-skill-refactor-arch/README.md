@@ -72,29 +72,33 @@ Cada projeto contém a skill em `.claude/skills/refactor-arch/`.
 
 ## Análise Manual dos Projetos
 
-> Cada problema abaixo está classificado segundo a escala do enunciado
-> (CRITICAL → HIGH → MEDIUM → LOW) com o **arquivo:linha** onde foi observado
-> e uma **justificativa** explicando por que aquela severidade se aplica.
+> Cada problema abaixo foi identificado **lendo o código real do repositório base**
+> ([`devfullcycle/mba-ia-refactor-projects-skill`](https://github.com/devfullcycle/mba-ia-refactor-projects-skill)),
+> está classificado segundo a escala do enunciado (CRITICAL → HIGH → MEDIUM → LOW),
+> tem o **arquivo:linha** exatos e uma **justificativa** da severidade.
 
 ### Projeto 1 — code-smells-project (Python/Flask)
 
-**Stack:** Python 3, Flask, raw `sqlite3`, sem ORM  
-**Arquitetura original:** Monolítica — `app.py` único com ~800 linhas
+**Stack:** Python 3, Flask, raw `sqlite3` (sem ORM), 4 arquivos (`app.py` 88L, `controllers.py` 292L, `models.py` 314L, `database.py` 86L)  
+**Arquitetura original:** Monolítica — separação só por nome de arquivo; toda a lógica/SQL está em `models.py`
 
 | # | Severidade | Problema | Local | Justificativa |
 |---|------------|----------|-------|---------------|
-| 1 | **CRITICAL** | SQL Injection via f-strings em 4 rotas | `app.py:87, 102, 145` | Entrada do usuário concatenada direto na query — permite leitura/escrita arbitrária do banco. É o cenário-livro de falha grave de segurança. |
-| 2 | **CRITICAL** | Endpoint `/admin/query` sem autenticação | `app.py:312` | "SQL shell" aberto via POST. Qualquer cliente executa `DROP TABLE`. Falha completa de controle de acesso. |
-| 3 | **CRITICAL** | Senhas em MD5 sem salt | `app.py:198` | Algoritmo quebrado + sem salt → rainbow table reverte hashes em segundos. Expõe credenciais de todos os usuários se o DB vazar. |
-| 4 | **CRITICAL** | `SECRET_KEY` hardcoded no fonte | `app.py:12` | Chave de assinatura de sessão commitada no Git → qualquer pessoa com acesso ao repo forja sessões válidas. |
-| 5 | **HIGH** | God Class — `app.py` com ~800 linhas | `app.py` (arquivo inteiro) | Mistura roteamento, regras de negócio, queries SQL, validação e bootstrap. Inviabiliza teste unitário e qualquer evolução isolada. Forte violação de MVC/SOLID. |
-| 6 | **HIGH** | N+1 queries no listing de pedidos | `app.py:178` | Loop Python executando `SELECT` por pedido. Em 100 pedidos = 101 queries. Degrada com o volume. |
-| 7 | **MEDIUM** | Validação ausente nas rotas POST | `app.py:198, 240` | Endpoints aceitam JSON sem checar tipo/obrigatoriedade. Um payload sem `email` causa `KeyError → 500` em vez de `400`. Padrão ruim e gargalo de manutenção. |
-| 8 | **MEDIUM** | `GET /produtos` sem paginação | `app.py:55` | Retorna o catálogo inteiro em cada chamada. Em produção, com milhares de produtos, vira gargalo claro de performance — entra em MEDIUM por ser duplicado em várias rotas list. |
-| 9 | **MEDIUM** | `try/except` bare engolindo exceções | `app.py:289, 360` | `except:` sem logging mascara erros reais e retorna `200` em situações de falha. Inconsistência de comportamento ao longo da API. |
-| 10 | **LOW** | `app.run(debug=True)` hardcoded | `app.py:799` | Debug do Flask sempre ligado expõe o debugger PIN na rede. Não é falha arquitetural grave, mas é melhoria óbvia: bastaria ler de env. |
-| 11 | **LOW** | Magic numbers espalhados (`100`, `10`, `1`) | `app.py:148, 215` | Limites e flags numéricas soltas no código (ex.: `LIMIT 100`, `if status == 1`). Reduz legibilidade — caso típico de severidade LOW. |
-| 12 | **LOW** | Nomenclatura misturada PT/EN | `app.py` (geral) | `produtos`, `usuarios`, `def get_user_data`, `categoria`, `email` no mesmo arquivo. Não quebra nada, mas é o exemplo do enunciado de "nomenclatura de variáveis ruins". |
+| 1 | **CRITICAL** | SQL Injection generalizado por concatenação de strings em **todas** as queries dinâmicas | `models.py:28, 47-50, 92, 105-111, 127-129, 140, 148-150, 174, 188, 192, 220, 224, 280, 285-297` | Login (`models.py:105-111`) e busca (`models.py:285-297`) concatenam input do usuário direto no SQL — permite bypass de auth e extração arbitrária do banco. Falha catastrófica de segurança. |
+| 2 | **CRITICAL** | Senhas armazenadas e comparadas em **plaintext** | `models.py:105-111, 127-129` + seed em `database.py:75-83` | Não há hash, MD5, nada: a coluna `senha` guarda a string literal e o login compara `senha = 'XXX'`. Pior cenário possível. |
+| 3 | **CRITICAL** | Endpoint `/admin/query` sem auth aceita SQL arbitrário do body | `app.py:59-78` | "SQL shell" aberto via POST — `DROP TABLE`, `UPDATE`, `SELECT * FROM usuarios` por qualquer cliente. Equivalente a comprometer o banco. |
+| 4 | **CRITICAL** | Endpoint `/admin/reset-db` sem auth apaga **tudo** | `app.py:47-57` | `DELETE FROM` em produtos, usuários, pedidos sem checagem alguma. Vandalismo em um curl. |
+| 5 | **CRITICAL** | `SECRET_KEY` hardcoded **e exposta** pelo `/health` | `app.py:7` + `controllers.py:288-289` | A chave de assinatura de sessão está no source `'minha-chave-super-secreta-123'` **e** ainda é retornada em texto puro pelo endpoint público de health-check. |
+| 6 | **HIGH** | Hash/plaintext de senha vazado em todas as listagens de usuário | `models.py:84, 99` | `get_todos_usuarios()` e `get_usuario_por_id()` incluem o campo `senha` no dict retornado. `GET /usuarios` devolve a senha de todo mundo. |
+| 7 | **HIGH** | N+1 + cursores aninhados em `get_pedidos_usuario` e `get_todos_pedidos` | `models.py:171-201, 203-233` | Loop sobre pedidos → loop sobre itens → `SELECT nome FROM produtos WHERE id = X` por item. 3 cursores aninhados, complexidade O(n·m). |
+| 8 | **HIGH** | Estado global mutável para conexão de banco | `database.py:4-10` (`db_connection = None` + `global db_connection`) | Conexão única compartilhada com `check_same_thread=False`. Inviabiliza testes paralelos e cria risco de corrupção sob carga. |
+| 9 | **MEDIUM** | `DEBUG = True` em `app.config` (não só no `run`) | `app.py:8` | Habilita o reloader e o debugger interativo do Flask em qualquer ambiente. Exposição de stack-traces e PIN do debugger. |
+| 10 | **MEDIUM** | Catch-all `except Exception as e: jsonify({"erro": str(e)})` em ~16 handlers | `controllers.py:10-12, 21-22, 60-62, 95-96, 108-109, 125-126, 133-134, 143-144, 164-165, 185-186, 226-227, 234-235, 254-255, 261-262, 291-292` | Vaza mensagens internas (incluindo SQL) para o cliente e impede tratamento centralizado/logging adequado. |
+| 11 | **MEDIUM** | Listagens sem paginação | `controllers.py:5` (`listar_produtos`), `controllers.py:128` (`listar_usuarios`), `controllers.py:229` (`listar_todos_pedidos`) | Carrega tabela inteira a cada request. Gargalo de performance previsível em produção. |
+| 12 | **MEDIUM** | Validação manual duplicada entre `criar_produto` e `atualizar_produto` | `controllers.py:24-58` vs `controllers.py:64-93` | Mesma lógica copy-paste sem schema/helper. Duplicação clara, alta chance de divergir em manutenção. |
+| 13 | **LOW** | `app.run(debug=True)` hardcoded no entry-point | `app.py:88` | Não lê de env. Melhoria trivial: `debug=os.getenv("DEBUG") == "true"`. |
+| 14 | **LOW** | Magic numbers em regra de desconto | `models.py:256-262` (limiares `10000/5000/1000` e taxas `0.1/0.05/0.02`) | Exatamente o exemplo de "magic numbers" do enunciado. Sem constantes nomeadas. |
+| 15 | **LOW** | Nomes ruins (`cursor2`, `cursor3`) e import não usado (`import sqlite3`) | `models.py:2, 187, 191, 219, 223` | Cursores numerados em sequência ao invés de nome descritivo; import morto no topo do arquivo. |
 
 **Resultado:** Refatorado em 12 arquivos MVC (`src/models/`, `src/controllers/`, `src/views/`, `src/middlewares/`).
 
@@ -102,24 +106,28 @@ Cada projeto contém a skill em `.claude/skills/refactor-arch/`.
 
 ### Projeto 2 — ecommerce-api-legacy (Node.js/Express)
 
-**Stack:** Node.js, Express, `sqlite3` (callbacks async), `better-sqlite3` (após refatoração)  
-**Arquitetura original:** God Class `AppManager` — 1200+ linhas em arquivo único
+**Stack:** Node.js, Express, `sqlite3` (callbacks async), 3 arquivos (`app.js` 14L, `AppManager.js` 141L, `utils.js` 25L)  
+**Arquitetura original:** God class `AppManager` com DB, rotas, pagamento, log e cache em um único objeto
 
 | # | Severidade | Problema | Local | Justificativa |
 |---|------------|----------|-------|---------------|
-| 1 | **CRITICAL** | Banco `:memory:` em produção | `src/database.js:3` | Todos os dados (cursos, pagamentos, matrículas) somem a cada restart. Impede a aplicação de funcionar corretamente — exatamente o exemplo do enunciado de falha CRITICAL. |
-| 2 | **CRITICAL** | "Criptografia" de senha em base64 | `src/models/UserModel.js:45` | Base64 é codificação, não criptografia. `Buffer.from(b64, 'base64')` reverte a senha em uma linha. Equivale a guardar plaintext. |
-| 3 | **CRITICAL** | JWT secret e payment key hardcoded | `src/app.js:8` | `super-secret-jwt-key-2024` e `pk_test_hardcoded` no source. Vazamento total de credenciais ao commitar. |
-| 4 | **CRITICAL** | `/api/admin/financial-report` sem auth | `src/app.js:142` | Relatório de receita exposto sem qualquer verificação. Vazamento direto de dados financeiros. |
-| 5 | **CRITICAL** | God Class `AppManager` (1200+ linhas) | `src/app.js` (arquivo inteiro) | DB, regras de negócio, rotas, e-mail e pagamento dentro de uma classe com estado global mutável. Violação total da separação de responsabilidades. |
-| 6 | **HIGH** | Callback hell com N+1 no relatório financeiro | `src/app.js:380-450` | `db.all()` aninhado em loop sobre cursos — pyramid-of-doom + O(n) queries. Mantém escala ruim e é praticamente impossível de testar. |
-| 7 | **HIGH** | Registros órfãos ao deletar usuário | `src/app.js:510` | `deleteUser` apaga só a linha do usuário. `payments` e `enrollments` ficam com `user_id` apontando para nada. Quebra integridade referencial. |
-| 8 | **MEDIUM** | Sem validação de payload em rotas POST/PUT | `src/app.js:200, 245, 280` | Nenhum `joi`, `zod` ou `express-validator`. Campos obrigatórios checados ad-hoc ou nem checados. Padrão inconsistente em toda a API. |
-| 9 | **MEDIUM** | Sem rate limiting nas rotas de auth | `src/app.js:170` | `/api/login` aberto para brute force ilimitado. Não é falha grave por si só (existem outros controles), mas é gargalo conhecido e padrão ruim. |
-| 10 | **MEDIUM** | Status codes inconsistentes (sempre 200) | `src/app.js` (várias rotas) | Erros de validação retornam `200 { error: ... }` em vez de `400/404`. Clientes não conseguem reagir corretamente. |
-| 11 | **LOW** | `console.log` espalhado como logging | `src/app.js:55, 88, 412` | Sem nível, sem timestamp, sem `winston/pino`. Funciona, mas é melhoria óbvia de legibilidade/operação. |
-| 12 | **LOW** | Magic numbers em regras de negócio | `src/app.js:320` (`if (price > 1000) discount = 0.1`) | Valores de desconto e thresholds soltos no meio do código. Exemplo direto do "magic numbers" do enunciado. |
-| 13 | **LOW** | Uso indevido de `var` e nomes pouco descritivos | `src/app.js` (geral) | `var x`, `var data`, `var tmp` em código moderno Node. Não quebra, mas é melhoria de legibilidade clássica. |
+| 1 | **CRITICAL** | Banco SQLite em `:memory:` | `src/AppManager.js:7` | Tudo (matrículas, pagamentos, audit logs) some a cada restart. Não é "uma melhoria possível", é impedimento de funcionamento real. |
+| 2 | **CRITICAL** | Credenciais hardcoded (DB password, payment gateway, SMTP) | `src/utils.js:2-6` (`dbPass: "senha_super_secreta_prod_123"`, `paymentGatewayKey: "pk_live_..."`) | "pk_live_" sugere chave de produção exposta no Git. Vazamento direto de credenciais financeiras. |
+| 3 | **CRITICAL** | Seed cria usuário com senha em **plaintext** `'123'` | `src/AppManager.js:18` | `INSERT INTO users ... pass) VALUES ('Leonan', '...', '123')`. Não há `set_password`, é a string literal. |
+| 4 | **CRITICAL** | "Criptografia" de senha = base64 num loop inútil | `src/utils.js:17-23` (`badCrypto`) | `Buffer.from(pwd).toString('base64')` é reversível em 1 linha. O loop de 10000 iterações concatena os 2 primeiros chars do mesmo base64 — não acrescenta segurança nenhuma. |
+| 5 | **CRITICAL** | `/api/admin/financial-report` e `DELETE /api/users/:id` sem autenticação | `src/AppManager.js:80, 131` | Receita por curso e remoção de usuário disponíveis a qualquer cliente. Vazamento financeiro + capacidade destrutiva. |
+| 6 | **HIGH** | God class `AppManager` controla DB, rotas, pagamento e logging | `src/AppManager.js` (arquivo todo) | Em 141 linhas: cria DB no construtor (`:7`), faz `INSERT` de seed (`:18`), define todas as rotas (`:25-138`) e processa pagamento (`:43-64`). Forte violação de SRP/MVC. |
+| 7 | **HIGH** | Callback hell + N+1 em `/api/admin/financial-report` | `src/AppManager.js:80-129` | 4 níveis de callback (`db.all` cursos → `db.all` enrollments → `db.get` user → `db.get` payment), com counter manual `coursesPending`/`enrPending`. Impossível de manter. |
+| 8 | **HIGH** | Registros órfãos ao deletar usuário | `src/AppManager.js:131-137` | `DELETE FROM users` mas `enrollments` e `payments` ficam apontando para `user_id` inexistente. O próprio source comenta: "matrículas e pagamentos ficaram sujos no banco". |
+| 9 | **HIGH** | Número de cartão logado no `console.log` | `src/AppManager.js:45` (`console.log(\`Processando cartão ${cc} na chave ${config.paymentGatewayKey}\`)`) | Card PAN + chave de gateway no log padrão. Violação de PCI e vazamento via qualquer agregador de logs. |
+| 10 | **MEDIUM** | Senha default `'123456'` quando o cliente não envia uma | `src/AppManager.js:68` (`badCrypto(p \|\| "123456")`) | Em vez de erro 400, cria usuário com senha conhecida. Backdoor não-intencional. |
+| 11 | **MEDIUM** | "Aprovação" de pagamento por prefixo do cartão | `src/AppManager.js:46` (`status = cc.startsWith("4") ? "PAID" : "DENIED"`) | Regra de negócio fake e fragmentada inline no handler. Em um stub seria ok, mas o handler também faz INSERT em `payments` como se fosse real. |
+| 12 | **MEDIUM** | Respostas com formatos inconsistentes (string vs JSON) e status sempre 500 em erro de DB | `src/AppManager.js:38, 41, 51, 55, 60, 135` | `res.send("Curso não encontrado")` (text/plain) vs `res.status(200).json({ msg, ... })` em rotas próximas. Cliente não consegue parsear de forma uniforme. |
+| 13 | **MEDIUM** | Variáveis de request com 1-3 letras (`u, e, p, cid, cc`) | `src/AppManager.js:29-33` | Em vez de `name, email, password, courseId, card`. Reduz drasticamente a legibilidade e a manutenibilidade. |
+| 14 | **LOW** | Hardcoded `port: 3000` no objeto config (sem `process.env.PORT`) | `src/utils.js:6` | Trivial de externalizar; o resto da config está no mesmo lugar. |
+| 15 | **LOW** | Coluna do banco chamada `pass` em vez de `password` | `src/AppManager.js:12` | Convenção ruim, conflita com palavra reservada em vários ORMs/linguagens. |
+| 16 | **LOW** | Magic strings `'PAID'`, `'DENIED'`, `'4'` e mensagens misturadas PT/EN (`"Bad Request"` vs `"Pagamento recusado"`) | `src/AppManager.js:35, 38, 46-48` | Sem `enum`/constantes, sem internacionalização — caso típico do enunciado de "magic numbers/strings + nomenclatura". |
+| 17 | **LOW** | Import não usado `totalRevenue` | `src/AppManager.js:2` | Trazido do `utils.js` e nunca referenciado no arquivo. |
 
 **Resultado:** Refatorado com `createApp()` factory, `better-sqlite3` síncrono, bcrypt, arquivos em `src/models/`, `src/controllers/`, `src/routes/`, `src/middlewares/`.
 
@@ -127,21 +135,29 @@ Cada projeto contém a skill em `.claude/skills/refactor-arch/`.
 
 ### Projeto 3 — task-manager-api (Python/Flask + SQLAlchemy)
 
-**Stack:** Python 3, Flask, Flask-SQLAlchemy ORM, SQLite  
-**Arquitetura original:** Parcialmente organizada — models separados, mas rotas "gordas" com lógica de negócio
+**Stack:** Python 3, Flask, Flask-SQLAlchemy ORM, SQLite. Estrutura inicial: `models/`, `routes/`, `services/`, `utils/`  
+**Arquitetura original:** Parcialmente organizada — models separados, mas rotas "gordas" com toda a lógica de negócio
 
 | # | Severidade | Problema | Local | Justificativa |
 |---|------------|----------|-------|---------------|
-| 1 | **CRITICAL** | `SECRET_KEY` hardcoded + senha SMTP `'senha123'` | `app.py:13`, `services/notification_service.py:8-9` | Credenciais sensíveis em texto puro no source. Vaza a chave de sessão e a senha de envio de e-mail no Git. |
-| 2 | **HIGH** | Lógica de negócio embutida em route handlers | `routes/task_routes.py`, `routes/user_routes.py`, `routes/report_routes.py` | Validação, cálculo de overdue/completion rate, regra de permissão e serialização HTTP tudo dentro da mesma função. Forte violação de MVC — controllers/services não existem. |
-| 3 | **HIGH** | N+1 ORM queries no listing de tasks | `routes/task_routes.py:42-57` | `User.query.get()` e `Category.query.get()` chamados dentro do loop por task → 2n+1 queries. Degrada drasticamente com volume. |
-| 4 | **HIGH** | N+1 no `GET /reports/summary` | `routes/report_routes.py:53-68` | `Task.query.filter_by(user_id=u.id)` dentro de loop sobre usuários. Mesma classe de problema, em rota de relatório (impacto ainda maior). |
-| 5 | **MEDIUM** | Sem tratamento centralizado de erros | `app.py`, `routes/*.py` | Cada handler tem seu próprio `try/except` retornando formato diferente. Sem `@app.errorhandler` registrado. Inconsistência de contrato da API. |
-| 6 | **MEDIUM** | Endpoints `GET /tasks` e `GET /users` sem paginação | `routes/task_routes.py:30`, `routes/user_routes.py:25` | Listings carregam a tabela inteira na memória. Em escala vira gargalo de performance — exatamente o tipo de problema MEDIUM do enunciado. |
-| 7 | **MEDIUM** | Validações de input ausentes nas rotas POST | `routes/task_routes.py:75`, `routes/user_routes.py:40` | Nenhum schema (marshmallow/pydantic). Campos obrigatórios checados com `if not data.get(...)` ad-hoc, retornando mensagens diferentes em cada rota. |
-| 8 | **LOW** | `/health` expõe `timestamp` do servidor | `app.py:23` | Retornar `datetime.now()` no health não é falha grave, mas é dado desnecessário que assiste reconhecimento. Melhoria simples. |
-| 9 | **LOW** | `print()` usado para logging | `routes/task_routes.py:88`, `services/notification_service.py:25` | Sem `logging.getLogger`, sem nível. Funciona, mas o enunciado coloca esse tipo de melhoria de legibilidade como LOW. |
-| 10 | **LOW** | Magic numbers em regra de overdue | `routes/task_routes.py:50` (`if (datetime.now() - due).days > 7`) | `7` solto no código sem constante nomeada (`OVERDUE_DAYS`). Caso clássico do "magic number" listado no enunciado. |
+| 1 | **CRITICAL** | `SECRET_KEY = 'super-secret-key-123'` hardcoded | `app.py:13` | Chave de sessão Flask em texto puro no source, sem fallback de env. |
+| 2 | **CRITICAL** | Senha SMTP `'senha123'` hardcoded | `services/notification_service.py:10` | Credencial de envio de e-mail commitada no Git, ao lado de `email_user = 'taskmanager@gmail.com'`. |
+| 3 | **CRITICAL** | Senhas em **MD5 sem salt** | `models/user.py:29, 32` (`hashlib.md5(pwd.encode()).hexdigest()`) | Algoritmo quebrado, sem salt, reversível por rainbow table. Vazamento total se o DB cair em mãos erradas. |
+| 4 | **CRITICAL** | `to_dict()` do `User` inclui o campo `password` | `models/user.py:21` | Toda rota que devolve `user.to_dict()` (`/users`, `/login`, `/users/<id>`) vaza o hash MD5 para o cliente. |
+| 5 | **HIGH** | N+1 ORM em `GET /tasks` | `routes/task_routes.py:42, 51` (`User.query.get(t.user_id)` e `Category.query.get(t.category_id)` no loop) | 2n+1 SQL para n tasks. Trivialmente resolvível com `joinedload`. |
+| 6 | **HIGH** | N+1 em `GET /reports/summary` | `routes/report_routes.py:53-67` (`Task.query.filter_by(user_id=u.id)` no loop sobre usuários) | Em relatório a degradação é ainda pior — endpoint usado para dashboards. |
+| 7 | **HIGH** | N+1 em `GET /categories` e `/tasks/stats` | `routes/report_routes.py:161-163`, `routes/task_routes.py:281-287` | `Task.query.filter_by(category_id=c.id).count()` por categoria; `Task.query.all()` só para varrer e contar overdue em Python. |
+| 8 | **HIGH** | Lógica de negócio inteiramente dentro de route handlers | `routes/task_routes.py:30-39, 70-80, 281-296`, `routes/user_routes.py:42-90`, `routes/report_routes.py:13-101` | Cálculo de overdue, completion rate, validação e serialização HTTP misturados na mesma função. Controllers/services não existem. |
+| 9 | **MEDIUM** | `except:` bare engolindo todas as exceções (incluindo `KeyboardInterrupt`) | `routes/task_routes.py:62-63, 137-138, 204-205, 236-238`, `routes/user_routes.py:130-132, 149-151`, `routes/report_routes.py:186-188, 207-209, 221-223` | Mascara erros reais (`ConnectionError` retorna 500 genérico), impede observabilidade e bloqueia sinais de OS. |
+| 10 | **MEDIUM** | Cálculo de "overdue" duplicado em 6 lugares com regra idêntica | `routes/task_routes.py:30-39, 70-80, 283-287`, `routes/report_routes.py:33-43, 132-135`, `routes/user_routes.py:171-180` | Mesmo `if t.due_date and t.due_date < datetime.utcnow() and t.status not in ('done','cancelled')` reescrito 6×. Bug em um deles passa despercebido. |
+| 11 | **MEDIUM** | Sem paginação em `/tasks`, `/users`, `/categories` | `routes/task_routes.py:14`, `routes/user_routes.py:12`, `routes/report_routes.py:159` | Listagens carregam tabela inteira na memória. Padrão MEDIUM clássico de performance. |
+| 12 | **MEDIUM** | Validações duplicadas e fora dos schemas declarados em `utils/helpers.py` | `routes/task_routes.py:110, 113`, `routes/user_routes.py:61, 64, 71` vs constantes em `utils/helpers.py:110-117` (não usadas) | `VALID_STATUSES`, `MIN/MAX_TITLE_LENGTH`, `MIN_PASSWORD_LENGTH` existem como constantes mas as rotas reescrevem os literais inline. |
+| 13 | **LOW** | `/health` expõe `timestamp` do servidor | `app.py:24` | `{'status': 'ok', 'timestamp': str(datetime.datetime.now())}`. Dado desnecessário no health. |
+| 14 | **LOW** | `app.run(debug=True)` hardcoded | `app.py:34` | Sem leitura de `os.environ`. Melhoria trivial. |
+| 15 | **LOW** | Imports não utilizados em vários arquivos | `routes/task_routes.py:7` (`json, os, sys, time`), `routes/user_routes.py:6` (`hashlib, json`), `routes/report_routes.py:8` (`json`), `utils/helpers.py:3-7` (`os, json, sys, math, hashlib`) | Ruído no topo dos arquivos — afeta legibilidade, é o tipo de problema LOW do enunciado. |
+| 16 | **LOW** | Magic numbers (`7` dias, `priority <= 2` como "high") | `routes/report_routes.py:45, 129` | Constantes nomeadas (`RECENT_DAYS = 7`, `HIGH_PRIORITY = 2`) resolveriam — é o exemplo literal do enunciado de "magic numbers soltos". |
+| 17 | **LOW** | `type(tags) == list` em vez de `isinstance(tags, list)` | `routes/task_routes.py:141, 210` | Antipattern de checagem de tipo em Python. Não quebra, mas é melhoria de legibilidade/correção. |
+| 18 | **LOW** | Token "JWT" hardcoded literalmente como `'fake-jwt-token-' + str(user.id)` | `routes/user_routes.py:210` | Não chega a CRITICAL porque ninguém valida esse "token" do outro lado, mas é caso clássico de melhoria LOW (string mágica + funcionalidade não implementada). |
 
 **Resultado:** Refatorado com `create_app()` factory em `src/`, controllers separados, `joinedload` para eliminar N+1, `register_error_handlers()` centralizado.
 
